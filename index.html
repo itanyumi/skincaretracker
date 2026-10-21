@@ -329,4 +329,374 @@ function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result);
-    reader.onerror = 
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// 翻譯成繁體中文（任何語言都翻譯，唔再判斷）
+async function translateToChinese(text) {
+  if (!text || text.trim().length < 1) return text;
+
+  try {
+    const maxLen = 450;
+    let result = '';
+    for (let i = 0; i < text.length; i += maxLen) {
+      const chunk = text.slice(i, i + maxLen);
+      // 使用 autodetect 自動偵測原文語言 → 繁體中文
+      const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(chunk)}&langpair=autodetect|zh-TW`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (data && data.responseData && data.responseData.translatedText) {
+        result += data.responseData.translatedText + ' ';
+      } else {
+        result += chunk + ' ';
+      }
+    }
+    return result.trim();
+  } catch (err) {
+    console.error('翻譯失敗', err);
+    alert('翻譯失敗，請稍後再試或檢查網絡');
+    return text;
+  }
+}
+
+// 手動翻譯按鈕
+async function translateField(fieldId, btnId) {
+  const textarea = document.getElementById(fieldId);
+  const btn = document.getElementById(btnId);
+  const originalText = textarea.value.trim();
+  
+  if (!originalText) {
+    alert('請先輸入內容再翻譯');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = '翻譯中…';
+
+  const translated = await translateToChinese(originalText);
+  textarea.value = translated;
+
+  btn.disabled = false;
+  btn.textContent = '翻譯成繁體中文';
+}
+
+function detectCategory(text) {
+  const t = (text || '').toLowerCase();
+  if (/toner|爽膚|化妝水|柔膚水|濕敷|hydrating toner/.test(t)) return '爽膚水';
+  if (/essence|精華|serum|安瓶|ampoule|concen/.test(t)) return '精華';
+  if (/cream|面霜|乳霜|moisturizer|moisturiser|乳液/.test(t)) return '面霜';
+  if (/mask|面膜|sheet mask|泥膜/.test(t)) return '面膜';
+  if (/cleanser|潔面|洗面|foam|gel cleanser|micellar/.test(t)) return '潔面';
+  if (/sunscreen|防曬|spf|pa\+/.test(t)) return '防曬';
+  if (/eye cream|眼霜|eye serum/.test(t)) return '眼霜';
+  if (/oil|精華油|facial oil|face oil/.test(t)) return '精華油';
+  return '其他';
+}
+
+function extractIngredients(text) {
+  const markers = [
+    /ingredients?[:：\s]*([\s\S]*)/i,
+    /成份[:：\s]*([\s\S]*)/i,
+    /成分[:：\s]*([\s\S]*)/i,
+    /ingrédients?[:：\s]*([\s\S]*)/i
+  ];
+  for (const re of markers) {
+    const m = (text || '').match(re);
+    if (m && m[1]) return m[1].trim().slice(0, 1600);
+  }
+  return (text || '').slice(0, 800);
+}
+
+// 事件綁定
+document.getElementById('addBtn').onclick = openAddModal;
+document.getElementById('cancelBtn').onclick = closeProductModal;
+document.getElementById('productForm').onsubmit = saveProduct;
+document.getElementById('packagingPhoto').onchange = previewPackaging;
+document.getElementById('ocrBtn').onclick = runOCR;
+document.getElementById('cancelCompareBtn').onclick = closeCompareModal;
+document.getElementById('compareForm').onsubmit = saveCompare;
+document.getElementById('closeLightboxBtn').onclick = closeLightbox;
+document.getElementById('lightbox').onclick = function(e) {
+  if (e.target === this) closeLightbox();
+};
+
+// 手動翻譯按鈕
+document.getElementById('translateIngredientsBtn').onclick = () => translateField('ingredients', 'translateIngredientsBtn');
+document.getElementById('translateIntroBtn').onclick = () => translateField('intro', 'translateIntroBtn');
+
+function previewPackaging(e) {
+  const file = e.target.files[0];
+  const preview = document.getElementById('packPreview');
+  const btn = document.getElementById('ocrBtn');
+  if (!file) {
+    preview.style.display = 'none';
+    btn.disabled = true;
+    currentPackBase64 = null;
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = ev => {
+    currentPackBase64 = ev.target.result;
+    preview.src = currentPackBase64;
+    preview.style.display = 'block';
+    btn.disabled = false;
+    document.getElementById('ocrStatus').textContent = '準備好可以識別';
+  };
+  reader.readAsDataURL(file);
+}
+
+async function runOCR() {
+  if (!currentPackBase64) return;
+  const btn = document.getElementById('ocrBtn');
+  const status = document.getElementById('ocrStatus');
+  btn.disabled = true;
+  status.textContent = '正在識別文字…';
+
+  try {
+    const result = await Tesseract.recognize(currentPackBase64, 'chi_tra+eng', {
+      logger: m => {
+        if (m.status === 'recognizing text') {
+          status.textContent = `識別中… ${Math.round(m.progress * 100)}%`;
+        }
+      }
+    });
+    const text = result.data.text || '';
+
+    // 分類
+    const cat = detectCategory(text);
+    document.getElementById('category').value = cat;
+
+    // 成份 + 強制翻譯
+    let ingredients = extractIngredients(text);
+    status.textContent = '正在翻譯成份成繁體中文…';
+    const translatedIngs = await translateToChinese(ingredients);
+    document.getElementById('ingredients').value = translatedIngs;
+
+    // 產品名
+    const nameInput = document.getElementById('productName');
+    if (!nameInput.value.trim() && text.length > 8) {
+      const line = text.split('\n').map(l => l.trim()).filter(l => l.length > 3)[0];
+      if (line) nameInput.value = line.slice(0, 45);
+    }
+
+    status.textContent = `完成！已自動填充分類「${cat}」+ 成份（已轉繁體中文）`;
+  } catch (err) {
+    console.error(err);
+    status.textContent = '識別失敗，請手動輸入';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function openAddModal() {
+  document.getElementById('modalTitle').textContent = '新增護膚品';
+  document.getElementById('productForm').reset();
+  document.getElementById('editId').value = '';
+  document.getElementById('startDate').value = new Date().toISOString().slice(0,10);
+  document.getElementById('packPreview').style.display = 'none';
+  document.getElementById('ocrStatus').textContent = '';
+  document.getElementById('ocrBtn').disabled = true;
+  currentPackBase64 = null;
+  document.getElementById('productModal').classList.add('show');
+}
+
+function closeProductModal() {
+  document.getElementById('productModal').classList.remove('show');
+}
+
+function saveProduct(e) {
+  e.preventDefault();
+  const id = document.getElementById('editId').value;
+  const product = {
+    id: id || generateId(),
+    name: document.getElementById('productName').value.trim(),
+    brand: document.getElementById('brand').value.trim(),
+    category: document.getElementById('category').value,
+    ingredients: document.getElementById('ingredients').value.trim(),
+    intro: document.getElementById('intro').value.trim(),
+    startDate: document.getElementById('startDate').value,
+    notes: document.getElementById('notes').value.trim(),
+    packagingPhoto: currentPackBase64,
+    compares: []
+  };
+  let data = loadData();
+  if (id) {
+    const idx = data.findIndex(x => x.id === id);
+    if (idx >= 0) {
+      product.compares = data[idx].compares || [];
+      data[idx] = product;
+    }
+  } else {
+    data.unshift(product);
+  }
+  saveData(data);
+  closeProductModal();
+  render();
+}
+
+function editProduct(id) {
+  const p = loadData().find(x => x.id === id);
+  if (!p) return;
+  document.getElementById('modalTitle').textContent = '編輯護膚品';
+  document.getElementById('editId').value = p.id;
+  document.getElementById('productName').value = p.name || '';
+  document.getElementById('brand').value = p.brand || '';
+  document.getElementById('category').value = p.category || '其他';
+  document.getElementById('ingredients').value = p.ingredients || '';
+  document.getElementById('intro').value = p.intro || '';
+  document.getElementById('startDate').value = p.startDate || '';
+  document.getElementById('notes').value = p.notes || '';
+
+  const preview = document.getElementById('packPreview');
+  if (p.packagingPhoto) {
+    preview.src = p.packagingPhoto;
+    preview.style.display = 'block';
+    currentPackBase64 = p.packagingPhoto;
+    document.getElementById('ocrBtn').disabled = false;
+  } else {
+    preview.style.display = 'none';
+    currentPackBase64 = null;
+    document.getElementById('ocrBtn').disabled = true;
+  }
+  document.getElementById('productModal').classList.add('show');
+}
+
+function deleteProduct(id) {
+  if (!confirm('確定刪除呢件護膚品？')) return;
+  saveData(loadData().filter(x => x.id !== id));
+  render();
+}
+
+function openCompareModal(id) {
+  document.getElementById('compareForm').reset();
+  document.getElementById('compareProductId').value = id;
+  document.getElementById('compareDate').value = new Date().toISOString().slice(0,10);
+  document.getElementById('compareModal').classList.add('show');
+}
+
+function closeCompareModal() {
+  document.getElementById('compareModal').classList.remove('show');
+}
+
+async function saveCompare(e) {
+  e.preventDefault();
+  const productId = document.getElementById('compareProductId').value;
+  const beforeFile = document.getElementById('beforePhoto').files[0];
+  const afterFile = document.getElementById('afterPhoto').files[0];
+  if (!beforeFile || !afterFile) return;
+
+  const [before, after] = await Promise.all([fileToBase64(beforeFile), fileToBase64(afterFile)]);
+  const compare = {
+    date: document.getElementById('compareDate').value,
+    note: document.getElementById('compareNote').value.trim(),
+    before, after
+  };
+  let data = loadData();
+  const p = data.find(x => x.id === productId);
+  if (p) {
+    if (!p.compares) p.compares = [];
+    p.compares.unshift(compare);
+    saveData(data);
+  }
+  closeCompareModal();
+  render();
+}
+
+function deleteCompare(pid, idx) {
+  if (!confirm('刪除呢組對比？')) return;
+  let data = loadData();
+  const p = data.find(x => x.id === pid);
+  if (p && p.compares) {
+    p.compares.splice(idx, 1);
+    saveData(data);
+    render();
+  }
+}
+
+function openLightbox(src) {
+  document.getElementById('lightboxImg').src = src;
+  document.getElementById('lightbox').classList.add('show');
+}
+function closeLightbox() {
+  document.getElementById('lightbox').classList.remove('show');
+}
+
+function render() {
+  const data = loadData();
+  const list = document.getElementById('productList');
+  const empty = document.getElementById('emptyState');
+
+  if (data.length === 0) {
+    list.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  list.innerHTML = data.map(p => {
+    const compares = p.compares || [];
+    return `
+      <div class="card">
+        <div class="product-header">
+          <div style="flex:1">
+            <div class="product-title">${escapeHtml(p.name)}</div>
+            <div class="product-meta">
+              ${p.brand ? escapeHtml(p.brand) + ' · ' : ''}${p.category || ''}
+              ${p.startDate ? ' · ' + p.startDate : ''}
+            </div>
+          </div>
+          ${p.packagingPhoto ? `<img class="packaging-thumb" src="${p.packagingPhoto}" onclick="openLightbox('${p.packagingPhoto}')">` : ''}
+        </div>
+        <div style="display:flex;gap:6px;margin-bottom:8px;">
+          <button class="btn btn-sm btn-outline" onclick="editProduct('${p.id}')">編輯</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteProduct('${p.id}')">刪除</button>
+        </div>
+
+        ${p.intro ? `
+          <div style="font-size:0.85rem;font-weight:500;margin-bottom:4px;">產品介紹</div>
+          <div class="intro-box">${escapeHtml(p.intro)}</div>
+        ` : ''}
+
+        ${p.ingredients ? `
+          <div style="font-size:0.85rem;font-weight:500;margin-bottom:4px;">成份</div>
+          <div class="ingredients-box">${escapeHtml(p.ingredients)}</div>
+        ` : ''}
+
+        ${p.notes ? `<div class="notes">${escapeHtml(p.notes)}</div>` : ''}
+
+        <div class="compare-section">
+          <div class="compare-title">前後對比 (${compares.length})</div>
+          ${compares.map((c, idx) => `
+            <div class="compare-row">
+              <div class="compare-date">${c.date}${c.note ? ' · ' + escapeHtml(c.note) : ''}</div>
+              <div class="photo-grid">
+                <div class="photo-box" onclick="openLightbox('${c.before}')">
+                  <img src="${c.before}"><div class="photo-label">用前</div>
+                  <div class="photo-actions">
+                    <button onclick="event.stopPropagation();deleteCompare('${p.id}',${idx})">🗑</button>
+                  </div>
+                </div>
+                <div class="photo-box" onclick="openLightbox('${c.after}')">
+                  <img src="${c.after}"><div class="photo-label">用後</div>
+                </div>
+              </div>
+            </div>
+          `).join('')}
+          <button class="add-compare-btn" onclick="openCompareModal('${p.id}')">＋ 新增前後對比</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// 初始化
+render();
+</script>
+</body>
+</html>
