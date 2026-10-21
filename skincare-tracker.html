@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>護膚追蹤</title>
+
+<meta name="theme-color" content="#e91e63">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="護膚追蹤">
+<meta name="mobile-web-app-capable" content="yes">
+
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23e91e63'/><text y='.9em' font-size='80' x='50%' text-anchor='middle' dominant-baseline='middle'>🧴</text></svg>">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23e91e63'/><text y='.9em' font-size='80' x='50%' text-anchor='middle' dominant-baseline='middle'>🧴</text></svg>">
+
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
+<style>
+:root {
+  --primary: #e91e63;
+  --primary-dark: #c2185b;
+  --bg: #fafafa;
+  --card: #ffffff;
+  --text: #333;
+  --muted: #777;
+  --border: #eee;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans TC", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+  padding-bottom: 90px;
+  -webkit-tap-highlight-color: transparent;
+}
+header {
+  background: linear-gradient(135deg, var(--primary), #f06292);
+  color: white;
+  padding: 16px;
+  text-align: center;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.12);
+}
+header h1 { font-size: 1.3rem; font-weight: 600; }
+.container { max-width: 640px; margin: 0 auto; padding: 16px; }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--primary); color: white; border: none;
+  border-radius: 12px; padding: 12px 18px; font-size: 0.95rem;
+  font-weight: 500; cursor: pointer;
+}
+.btn:active { background: var(--primary-dark); }
+.btn-outline {
+  background: transparent; color: var(--primary);
+  border: 2px solid var(--primary);
+}
+.btn-sm { padding: 7px 12px; font-size: 0.85rem; }
+.btn-danger { background: #e53935; }
+.btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.card {
+  background: var(--card); border-radius: 16px; padding: 16px;
+  margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+.product-header { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.product-title { font-size: 1.15rem; font-weight: 600; }
+.product-meta { color: var(--muted); font-size: 0.88rem; margin-top: 3px; }
+.packaging-thumb {
+  width: 70px; height: 70px; border-radius: 10px;
+  object-fit: cover; background: #f0f0f0; cursor: pointer;
+}
+.ingredients-box {
+  background: #f8f9fa; border-radius: 10px; padding: 10px 12px;
+  font-size: 0.88rem; color: #444; margin: 10px 0;
+  white-space: pre-wrap; max-height: 120px; overflow-y: auto;
+}
+.notes { font-size: 0.93rem; color: #555; margin: 8px 0; white-space: pre-wrap; }
+.compare-section { margin-top: 14px; }
+.compare-title { font-weight: 600; margin-bottom: 8px; font-size: 0.93rem; }
+.photo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.photo-box {
+  position: relative; aspect-ratio: 1; background: #f5f5f5;
+  border-radius: 12px; overflow: hidden; cursor: pointer;
+}
+.photo-box img { width: 100%; height: 100%; object-fit: cover; }
+.photo-label {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  background: rgba(0,0,0,0.55); color: white;
+  font-size: 0.78rem; text-align: center; padding: 3px;
+}
+.photo-actions { position: absolute; top: 6px; right: 6px; }
+.photo-actions button {
+  background: rgba(0,0,0,0.5); color: white; border: none;
+  border-radius: 50%; width: 26px; height: 26px; font-size: 13px; cursor: pointer;
+}
+.empty-state { text-align: center; padding: 60px 20px; color: var(--muted); }
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+  display: none; align-items: flex-end; justify-content: center; z-index: 200;
+}
+.modal-overlay.show { display: flex; }
+.modal {
+  background: white; width: 100%; max-width: 520px; max-height: 92vh;
+  border-radius: 20px 20px 0 0; padding: 22px 18px; overflow-y: auto;
+}
+.modal h2 { margin-bottom: 18px; font-size: 1.2rem; }
+.form-group { margin-bottom: 14px; }
+.form-group label { display: block; font-size: 0.88rem; font-weight: 500; margin-bottom: 5px; }
+.form-group input, .form-group select, .form-group textarea {
+  width: 100%; padding: 12px; border: 1px solid #ddd;
+  border-radius: 10px; font-size: 0.95rem; font-family: inherit;
+}
+.form-group textarea { resize: vertical; min-height: 70px; }
+.form-actions { display: flex; gap: 10px; margin-top: 20px; }
+.form-actions .btn { flex: 1; }
+.preview-pack {
+  width: 100%; max-height: 180px; object-fit: contain;
+  border-radius: 10px; background: #f5f5f5; margin-top: 8px; display: none;
+}
+.ocr-status { font-size: 0.85rem; color: var(--primary); margin-top: 6px; min-height: 20px; }
+.lightbox {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.9);
+  display: none; align-items: center; justify-content: center; z-index: 300; padding: 16px;
+}
+.lightbox.show { display: flex; }
+.lightbox img { max-width: 100%; max-height: 90vh; border-radius: 8px; }
+.lightbox-close {
+  position: absolute; top: 16px; right: 16px;
+  background: rgba(255,255,255,0.2); color: white; border: none;
+  width: 40px; height: 40px; border-radius: 50%; font-size: 24px; cursor: pointer;
+}
+.fab {
+  position: fixed; bottom: 24px; right: 24px;
+  width: 58px; height: 58px; border-radius: 50%;
+  background: var(--primary); color: white; border: none; font-size: 28px;
+  box-shadow: 0 4px 16px rgba(233,30,99,0.4); cursor: pointer;
+  z-index: 50; display: flex; align-items: center; justify-content: center;
+}
+.compare-row { margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+.compare-row:last-child { border-bottom: none; }
+.compare-date { font-size: 0.83rem; color: var(--muted); margin-bottom: 6px; }
+.add-compare-btn {
+  width: 100%; margin-top: 10px; border: 2px dashed #ddd;
+  background: transparent; color: var(--muted); border-radius: 12px;
+  padding: 13px; font-size: 0.92rem; cursor: pointer;
+}
+.install-banner {
+  display: none; background: #fff3e0; border: 1px solid #ffb74d;
+  border-radius: 12px; padding: 12px 14px; margin-bottom: 16px;
+  font-size: 0.9rem; color: #e65100;
+}
+.install-banner.show { display: block; }
+</style>
+</head>
+<body>
+<header>
+  <h1>護膚追蹤</h1>
+</header>
+
+<div class="container">
+  <div class="install-banner" id="installBanner">
+    用手機瀏覽器開啟後，選「加入主畫面」就可以好似 App 咁使用。
+  </div>
+
+  <div class="empty-state" id="emptyState">
+    <p style="font-size:1.1rem;margin-bottom:8px;">仲未有任何記錄</p>
+    <p>撳右下角 ＋ 開始加入護膚品啦！<br>可以影包裝相自動識別分類同成份</p>
+  </div>
+  <div id="productList"></div>
+</div>
+
+<button class="fab" id="addBtn">＋</button>
+
+<!-- 新增/編輯產品 Modal -->
+<div class="modal-overlay" id="productModal">
+  <div class="modal">
+    <h2 id="modalTitle">新增護膚品</h2>
+    <form id="productForm">
+      <input type="hidden" id="editId">
+      <div class="form-group">
+        <label>包裝相片（建議影清楚成分表）</label>
+        <input type="file" id="packagingPhoto" accept="image/*" capture="environment">
+        <img id="packPreview" class="preview-pack">
+        <div class="ocr-status" id="ocrStatus"></div>
+        <button type="button" class="btn btn-sm btn-outline" style="margin-top:8px;width:100%" id="ocrBtn" disabled>
+          🔍 一鍵識別分類 & 成份
+        </button>
+      </div>
+      <div class="form-group">
+        <label>產品名稱 *</label>
+        <input type="text" id="productName" required placeholder="例如：玻尿酸保濕精華">
+      </div>
+      <div class="form-group">
+        <label>品牌</label>
+        <input type="text" id="brand" placeholder="例如：The Ordinary">
+      </div>
+      <div class="form-group">
+        <label>分類</label>
+        <select id="category">
+          <option value="精華">精華</option>
+          <option value="面霜">面霜</option>
+          <option value="爽膚水">爽膚水 / 化妝水</option>
+          <option value="潔面">潔面</option>
+          <option value="面膜">面膜</option>
+          <option value="精華油">精華油</option>
+          <option value="防曬">防曬</option>
+          <option value="眼霜">眼霜</option>
+          <option value="其他">其他</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>成份</label>
+        <textarea id="ingredients" placeholder="識別後會自動填入..."></textarea>
+      </div>
+      <div class="form-group">
+        <label>開始使用日期</label>
+        <input type="date" id="startDate">
+      </div>
+      <div class="form-group">
+        <label>使用心得 / 備註</label>
+        <textarea id="notes"></textarea>
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-outline" id="cancelBtn">取消</button>
+        <button type="submit" class="btn">儲存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- 對比 Modal -->
+<div class="modal-overlay" id="compareModal">
+  <div class="modal">
+    <h2>新增前後對比</h2>
+    <form id="compareForm">
+      <input type="hidden" id="compareProductId">
+      <div class="form-group">
+        <label>對比日期</label>
+        <input type="date" id="compareDate" required>
+      </div>
+      <div class="form-group">
+        <label>用前相片 *</label>
+        <input type="file" id="beforePhoto" accept="image/*" required>
+      </div>
+      <div class="form-group">
+        <label>用後相片 *</label>
+        <input type="file" id="afterPhoto" accept="image/*" required>
+      </div>
+      <div class="form-group">
+        <label>備註（可選）</label>
+        <input type="text" id="compareNote">
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-outline" id="cancelCompareBtn">取消</button>
+        <button type="submit" class="btn">儲存對比</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Lightbox -->
+<div class="lightbox" id="lightbox">
+  <button class="lightbox-close" id="closeLightboxBtn">×</button>
+  <img id="lightboxImg" src="">
+</div>
+
+<script>
+// Manifest
+try {
+  const manifest = {
+    name: "護膚追蹤",
+    short_name: "護膚追蹤",
+    start_url: ".",
+    display: "standalone",
+    background_color: "#fafafa",
+    theme_color: "#e91e63",
+    icons: [{
+      src: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23e91e63'/><text y='.9em' font-size='80' x='50%' text-anchor='middle' dominant-baseline='middle'>🧴</text></svg>",
+      sizes: "192x192",
+      type: "image/svg+xml"
+    }]
+  };
+  const blob = new Blob([JSON.stringify(manifest)], {type: 'application/json'});
+  const link = document.createElement('link');
+  link.rel = 'manifest';
+  link.href = URL.createObjectURL(blob);
+  document.head.appendChild(link);
+} catch(e){}
+
+// 顯示安裝提示
+window.addEventListener('load', () => {
+  if (!window.matchMedia('(display-mode: standalone)').matches && !navigator.standalone) {
+    document.getElementById('installBanner').classList.add('show');
+  }
+});
+
+const STORAGE_KEY = 'skincare_tracker_v3';
+let currentPackBase64 = null;
+
+function loadData() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
+  catch { return []; }
+}
+function saveData(data) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
+function generateId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function detectCategory(text) {
+  const t = (text || '').toLowerCase();
+  if (/toner|爽膚|化妝水|柔膚水|濕敷/.test(t)) return '爽膚水';
+  if (/essence|精華|serum|安瓶|ampoule/.test(t)) return '精華';
+  if (/cream|面霜|乳霜|moisturizer|乳液/.test(t)) return '面霜';
+  if (/mask|面膜/.test(t)) return '面膜';
+  if (/cleanser|潔面|洗面|foam|micellar/.test(t)) return '潔面';
+  if (/sunscreen|防曬|spf/.test(t)) return '防曬';
+  if (/eye cream|眼霜/.test(t)) return '眼霜';
+  if (/oil|精華油/.test(t)) return '精華油';
+  return '其他';
+}
+
+function extractIngredients(text) {
+  const markers = [/ingredients?[:：\s]*([\s\S]*)/i, /成份[:：\s]*([\s\S]*)/i, /成分[:：\s]*([\s\S]*)/i];
+  for (const re of markers) {
+    const m = (text || '').match(re);
+    if (m && m[1]) return m[1].trim().slice(0, 1500);
+  }
+  return (text || '').slice(0, 800);
+}
+
+// 事件綁定
+document.getElementById('addBtn').onclick = openAddModal;
+document.getElementById('cancelBtn').onclick = closeProductModal;
+document.getElementById('productForm').onsubmit = saveProduct;
+document.getElementById('packagingPhoto').onchange = previewPackaging;
+document.getElementById('ocrBtn').onclick = runOCR;
+document.getElementById('cancelCompareBtn').onclick = closeCompareModal;
+document.getElementById('compareForm').onsubmit = saveCompare;
+document.getElementById('closeLightboxBtn').onclick = closeLightbox;
+document.getElementById('lightbox').onclick = function(e) {
+  if (e.target === this) closeLightbox();
+};
+
+function previewPackaging(e) {
+  const file = e.target.files[0];
+  const preview = document.getElementById('packPreview');
+  const btn = document.getElementById('ocrBtn');
+  if (!file) {
+    preview.style.display = 'none';
+    btn.disabled = true;
+    currentPackBase64 = null;
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = ev => {
+    currentPackBase64 = ev.target.result;
+    preview.src = currentPackBase64;
+    preview.style.display = 'block';
+    btn.disabled = false;
+    document.getElementById('ocrStatus').textContent = '準備好可以識別';
+  };
+  reader.readAsDataURL(file);
+}
+
+async function runOCR() {
+  if (!currentPackBase64) return;
+  const btn = document.getElementById('ocrBtn');
+  const status = document.getElementById('ocrStatus');
+  btn.disabled = true;
+  status.textContent = '正在識別中…';
+
+  try {
+    const result = await Tesseract.recognize(currentPackBase64, 'chi_tra+eng', {
+      logger: m => {
+        if (m.status === 'recognizing text') {
+          status.textContent = `識別中… ${Math.round(m.progress * 100)}%`;
+        }
+      }
+    });
+    const text = result.data.text || '';
+    document.getElementById('category').value = detectCategory(text);
+    document.getElementById('ingredients').value = extractIngredients(text);
+    const nameInput = document.getElementById('productName');
+    if (!nameInput.value.trim() && text.length > 8) {
+      const line = text.split('\n').map(l => l.trim()).filter(l => l.length > 3)[0];
+      if (line) nameInput.value = line.slice(0, 40);
+    }
+    status.textContent = '識別完成！請檢查並修改';
+  } catch (err) {
+    status.textContent = '識別失敗，請手動輸入';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function openAddModal() {
+  document.getElementById('modalTitle').textContent = '新增護膚品';
+  document.getElementById('productForm').reset();
+  document.getElementById('editId').value = '';
+  document.getElementById('startDate').value = new Date().toISOString().slice(0,10);
+  document.getElementById('packPreview').style.display = 'none';
+  document.getElementById('ocrStatus').textContent = '';
+  document.getElementById('ocrBtn').disabled = true;
+  currentPackBase64 = null;
+  document.getElementById('productModal').classList.add('show');
+}
+
+function closeProductModal() {
+  document.getElementById('productModal').classList.remove('show');
+}
+
+function saveProduct(e) {
+  e.preventDefault();
+  const id = document.getElementById('editId').value;
+  const product = {
+    id: id || generateId(),
+    name: document.getElementById('productName').value.trim(),
+    brand: document.getElementById('brand').value.trim(),
+    category: document.getElementById('category').value,
+    ingredients: document.getElementById('ingredients').value.trim(),
+    startDate: document.getElementById('startDate').value,
+    notes: document.getElementById('notes').value.trim(),
+    packagingPhoto: currentPackBase64,
+    compares: []
+  };
+  let data = loadData();
+  if (id) {
+    const idx = data.findIndex(x => x.id === id);
+    if (idx >= 0) {
+      product.compares = data[idx].compares || [];
+      data[idx] = product;
+    }
+  } else {
+    data.unshift(product);
+  }
+  saveData(data);
+  closeProductModal();
+  render();
+}
+
+function editProduct(id) {
+  const p = loadData().find(x => x.id === id);
+  if (!p) return;
+  document.getElementById('modalTitle').textContent = '編輯護膚品';
+  document.getElementById('editId').value = p.id;
+  document.getElementById('productName').value = p.name || '';
+  document.getElementById('brand').value = p.brand || '';
+  document.getElementById('category').value = p.category || '其他';
+  document.getElementById('ingredients').value = p.ingredients || '';
+  document.getElementById('startDate').value = p.startDate || '';
+  document.getElementById('notes').value = p.notes || '';
+  const preview = document.getElementById('packPreview');
+  if (p.packagingPhoto) {
+    preview.src = p.packagingPhoto;
+    preview.style.display = 'block';
+    currentPackBase64 = p.packagingPhoto;
+    document.getElementById('ocrBtn').disabled = false;
+  } else {
+    preview.style.display = 'none';
+    currentPackBase64 = null;
+    document.getElementById('ocrBtn').disabled = true;
+  }
+  document.getElementById('productModal').classList.add('show');
+}
+
+function deleteProduct(id) {
+  if (!confirm('確定刪除？')) return;
+  saveData(loadData().filter(x => x.id !== id));
+  render();
+}
+
+function openCompareModal(id) {
+  document.getElementById('compareForm').reset();
+  document.getElementById('compareProductId').value = id;
+  document.getElementById('compareDate').value = new Date().toISOString().slice(0,10);
+  document.getElementById('compareModal').classList.add('show');
+}
+
+function closeCompareModal() {
+  document.getElementById('compareModal').classList.remove('show');
+}
+
+async function saveCompare(e) {
+  e.preventDefault();
+  const productId = document.getElementById('compareProductId').value;
+  const beforeFile = document.getElementById('beforePhoto').files[0];
+  const afterFile = document.getElementById('afterPhoto').files[0];
+  if (!beforeFile || !afterFile) return;
+
+  const [before, after] = await Promise.all([fileToBase64(beforeFile), fileToBase64(afterFile)]);
+  const compare = {
+    date: document.getElementById('compareDate').value,
+    note: document.getElementById('compareNote').value.trim(),
+    before, after
+  };
+  let data = loadData();
+  const p = data.find(x => x.id === productId);
+  if (p) {
+    if (!p.compares) p.compares = [];
+    p.compares.unshift(compare);
+    saveData(data);
+  }
+  closeCompareModal();
+  render();
+}
+
+function deleteCompare(pid, idx) {
+  if (!confirm('刪除呢組對比？')) return;
+  let data = loadData();
+  const p = data.find(x => x.id === pid);
+  if (p && p.compares) {
+    p.compares.splice(idx, 1);
+    saveData(data);
+    render();
+  }
+}
+
+function openLightbox(src) {
+  document.getElementById('lightboxImg').src = src;
+  document.getElementById('lightbox').classList.add('show');
+}
+function closeLightbox() {
+  document.getElementById('lightbox').classList.remove('show');
+}
+
+function render() {
+  const data = loadData();
+  const list = document.getElementById('productList');
+  const empty = document.getElementById('emptyState');
+
+  if (data.length === 0) {
+    list.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  list.innerHTML = data.map(p => {
+    const compares = p.compares || [];
+    return `
+      <div class="card">
+        <div class="product-header">
+          <div style="flex:1">
+            <div class="product-title">${escapeHtml(p.name)}</div>
+            <div class="product-meta">
+              ${p.brand ? escapeHtml(p.brand) + ' · ' : ''}${p.category || ''}
+              ${p.startDate ? ' · ' + p.startDate : ''}
+            </div>
+          </div>
+          ${p.packagingPhoto ? `<img class="packaging-thumb" src="${p.packagingPhoto}" onclick="openLightbox('${p.packagingPhoto}')">` : ''}
+        </div>
+        <div style="display:flex;gap:6px;margin-bottom:8px;">
+          <button class="btn btn-sm btn-outline" onclick="editProduct('${p.id}')">編輯</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteProduct('${p.id}')">刪除</button>
+        </div>
+        ${p.ingredients ? `<div style="font-size:0.85rem;font-weight:500;margin-bottom:4px;">成份</div>
+          <div class="ingredients-box">${escapeHtml(p.ingredients)}</div>` : ''}
+        ${p.notes ? `<div class="notes">${escapeHtml(p.notes)}</div>` : ''}
+        <div class="compare-section">
+          <div class="compare-title">前後對比 (${compares.length})</div>
+          ${compares.map((c, idx) => `
+            <div class="compare-row">
+              <div class="compare-date">${c.date}${c.note ? ' · ' + escapeHtml(c.note) : ''}</div>
+              <div class="photo-grid">
+                <div class="photo-box" onclick="openLightbox('${c.before}')">
+                  <img src="${c.before}"><div class="photo-label">用前</div>
+                  <div class="photo-actions"><button onclick="event.stopPropagation();deleteCompare('${p.id}',${idx})">🗑</button></div>
+                </div>
+                <div class="photo-box" onclick="openLightbox('${c.after}')">
+                  <img src="${c.after}"><div class="photo-label">用後</div>
+                </div>
+              </div>
+            </div>
+          `).join('')}
+          <button class="add-compare-btn" onclick="openCompareModal('${p.id}')">＋ 新增前後對比</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// 初始化
+render();
+</script>
+</body>
+</html>
