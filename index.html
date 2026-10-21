@@ -218,7 +218,7 @@ header h1 { font-size: 1.3rem; font-weight: 600; }
 
       <div class="form-group">
         <label>成份</label>
-        <textarea id="ingredients" placeholder="可手動輸入英文成份，之後撳下面掣翻譯..."></textarea>
+        <textarea id="ingredients" placeholder="可貼任何語言的成份，之後撳下面掣翻譯成繁體中文"></textarea>
         <button type="button" class="btn btn-sm btn-outline translate-btn" id="translateIngredientsBtn">
           翻譯成繁體中文
         </button>
@@ -226,7 +226,7 @@ header h1 { font-size: 1.3rem; font-weight: 600; }
 
       <div class="form-group">
         <label>產品介紹（可貼官方網頁資料）</label>
-        <textarea id="intro" placeholder="可貼官方英文介紹，之後撳下面掣翻譯..."></textarea>
+        <textarea id="intro" placeholder="可貼任何語言的介紹，之後撳下面掣翻譯成繁體中文"></textarea>
         <button type="button" class="btn btn-sm btn-outline translate-btn" id="translateIntroBtn">
           翻譯成繁體中文
         </button>
@@ -323,4 +323,10 @@ function saveData(data) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 }
 function generateId() {
-  return Date.now().toString(36) + 
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = 
